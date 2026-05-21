@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vegasble — Guess the Vegas Casino</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 820px; margin: 1em auto; padding: 0 1em; background:#0e0a14; color:#f0e9d8; }
+  h1 { text-align:center; margin-bottom:0; color:#ffd24a; letter-spacing:2px; }
+  .sub { text-align:center; color:#bbb; margin-top:.25em; }
+  .clue {
+    background: linear-gradient(135deg,#3a1656,#7a1f4a);
+    padding: 1em 1.25em; border-radius: 8px; margin: 1em 0;
+    text-align:center; font-size: 1.1em; border:1px solid #ffd24a55;
+  }
+  .clue-label { color:#ffd24a; font-size:.8em; letter-spacing:2px; display:block; margin-bottom:.4em; }
+  .row { display:flex; gap:.5em; margin:1em 0; }
+  input, button { font-size:1em; padding:.55em; }
+  input { flex:1; background:#1c1422; color:#fff; border:1px solid #444; border-radius:4px; }
+  button { background:#ffd24a; color:#222; border:0; border-radius:4px; cursor:pointer; font-weight:600; }
+  button:hover { background:#ffbf1f; }
+  .guess { display:flex; justify-content:space-between; padding:.5em .75em; margin:.3em 0; border-radius:4px; color:#111; align-items:center; }
+  .guess .name { font-weight:600; }
+  .closest { font-weight:bold; text-align:center; margin:.5em 0; color:#ffd24a; }
+  .win { background:#ffd24a; color:#222; padding:1em; border-radius:6px; text-align:center; font-size:1.05em; margin:1em 0; }
+  datalist { display:none; }
+  .meta { font-size:.85em; color:#999; text-align:center; }
+  .footer { margin-top:2em; font-size:.8em; color:#666; text-align:center; }
+  #map { width: 100%; height: auto; background:#1b1726; border-radius:6px; display:block; }
+  .map-wrap { margin: 0.5em 0; }
+  .legend { font-size:.8em; color:#999; text-align:center; margin-top:.25em; }
+  #reset { background:#444; color:#eee; margin-top:1em; }
+  #reset:hover { background:#555; }
+</style>
+</head>
+<body>
+<h1>VEGASBLE</h1>
+<p class="sub">Guess the secret Vegas casino. The clue is a real fact tied to it.</p>
+
+<div class="clue">
+  <span class="clue-label">CLUE</span>
+  <div id="clueText">—</div>
+</div>
+
+<div class="map-wrap">
+  <svg id="map" viewBox="0 0 500 600" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="legend">Gold dots: casinos in dataset · Colored pins: your guesses · ⭐ closest so far</div>
+</div>
+
+<div class="row">
+  <input id="guess" list="casinos" placeholder="Type a Vegas casino…" autocomplete="off">
+  <button id="go">Guess</button>
+</div>
+<datalist id="casinos"></datalist>
+
+<div id="status" class="meta">Guesses: 0</div>
+<div id="closest" class="closest"></div>
+<div id="result"></div>
+<div id="history"></div>
+
+<button id="reset">New Game</button>
+
+<p class="footer">Inspired by Globle. Feedback is hotter/colder by physical distance — no miles shown. All clues reference publicly documented facts.</p>
+
+<script>
+// [name, lat, lon, clue, area]  area: "strip" or "downtown"
+const CASINOS = [
+  ["Mandalay Bay", 36.0925, -115.1759, "This resort's House of Blues hosted Carlos Santana's long-running 'An Intimate Evening' residency starting in 2012.", "strip"],
+  ["Luxor", 36.0955, -115.1761, "The 'Sky Beam' atop this pyramid-shaped resort is the brightest beam of light in the world, visible from space on clear nights.", "strip"],
+  ["Excalibur", 36.0986, -115.1750, "This medieval-castle-themed resort opened in 1990 as the largest hotel in the world at the time, with 4,008 rooms.", "strip"],
+  ["New York-New York", 36.1019, -115.1750, "The Big Apple Coaster wraps around the facade of this resort, with cars styled as NYC taxicabs.", "strip"],
+  ["Park MGM", 36.1031, -115.1745, "Lady Gaga performed her 'Enigma' and 'Jazz & Piano' residencies in the Dolby Live theater here starting in 2018.", "strip"],
+  ["MGM Grand", 36.1023, -115.1697, "One of the world's largest hotels by room count, with 6,852 rooms; site of the 1980 fire (then the Original MGM/Bally's) that prompted major US fire-safety code reforms.", "strip"],
+  ["Tropicana", 36.1003, -115.1717, "Opened in 1957 and nicknamed 'the Tiffany of the Strip'; it was imploded in October 2024 to make way for a new MLB ballpark.", "strip"],
+  ["Aria", 36.1072, -115.1764, "Centerpiece of the CityCenter complex that opened in 2009; designed by Pelli Clarke Pelli, it was the largest LEED Gold-certified hotel in the world at opening.", "strip"],
+  ["Cosmopolitan", 36.1100, -115.1747, "The two-story Chandelier Bar at this resort is built inside a three-tiered crystal chandelier you can climb stairs through.", "strip"],
+  ["Bellagio", 36.1126, -115.1767, "The dancing fountains out front choreographed to music — featured prominently in the 2001 film 'Ocean's Eleven'.", "strip"],
+  ["Planet Hollywood", 36.1094, -115.1726, "Britney Spears performed her 'Piece of Me' residency in the Zappos Theater here from 2013 to 2017.", "strip"],
+  ["Paris Las Vegas", 36.1124, -115.1707, "A half-scale replica of the Eiffel Tower rises from this resort's front, with an observation deck open to visitors.", "strip"],
+  ["Horseshoe Las Vegas", 36.1139, -115.1717, "Formerly Bally's; renamed in 2022 after Caesars acquired the Horseshoe brand. The original downtown Binion's Horseshoe hosted the early World Series of Poker.", "strip"],
+  ["Caesars Palace", 36.1163, -115.1745, "Evel Knievel attempted to jump its fountains on a motorcycle on December 31, 1967 — and crashed dramatically.", "strip"],
+  ["The Cromwell", 36.1156, -115.1717, "This boutique resort houses the rooftop 'Drai's Beachclub & Nightclub', with views over the center of the Strip.", "strip"],
+  ["Flamingo", 36.1166, -115.1722, "Opened in 1946 by mobster Bugsy Siegel; the oldest resort still operating on the Strip.", "strip"],
+  ["LINQ", 36.1175, -115.1717, "The High Roller observation wheel — once the world's tallest at 550 feet — anchors this resort's outdoor promenade.", "strip"],
+  ["Harrah's", 36.1194, -115.1719, "Mac King performed his long-running comedy magic afternoon show in this resort's showroom for over two decades.", "strip"],
+  ["Mirage", 36.1217, -115.1722, "Site of the October 3, 2003 tiger attack on Roy Horn during a Siegfried & Roy performance, which ended the duo's act.", "strip"],
+  ["Treasure Island", 36.1247, -115.1697, "The 'Sirens of TI' pirate-battle show ran out front from 2003 to 2013, replacing the original family-friendly 'Buccaneer Bay' show.", "strip"],
+  ["Venetian", 36.1213, -115.1678, "Gondola rides along indoor canals beneath a painted sky ceiling; modeled after the Doge's Palace and St. Mark's Square.", "strip"],
+  ["Palazzo", 36.1228, -115.1678, "Connected to the Venetian; its Grand Canal Shoppes feature a recurring 'Streetmosphere' troupe of costumed performers.", "strip"],
+  ["Wynn", 36.1264, -115.1656, "Steve Wynn's namesake resort opened in 2005 on the former site of the Desert Inn; the Lake of Dreams water-and-light show plays nightly.", "strip"],
+  ["Encore", 36.1297, -115.1654, "Encore Beach Club hosted a 2010s EDM-era residency rotation with The Chainsmokers, Diplo, and David Guetta.", "strip"],
+  ["Resorts World", 36.1356, -115.1647, "Opened in 2021 on the former Stardust site; Carrie Underwood opened her 'Reflection' residency in its theater that December.", "strip"],
+  ["Sahara", 36.1428, -115.1583, "Originally opened in 1952; the Beatles stayed here on their 1964 Vegas tour, and it briefly closed before reopening in 2014.", "strip"],
+  ["Circus Circus", 36.1372, -115.1647, "The big-top tent over the casino floor features free live circus acts on a center stage every half hour.", "strip"],
+  ["STRAT", 36.1472, -115.1561, "The 1,149-ft tower has thrill rides at the top, including SkyJump — a controlled freefall from over 800 feet.", "strip"],
+  // Downtown
+  ["Plaza", 36.1717, -115.1456, "Built on the site of Las Vegas's original Union Pacific Railroad depot (1905); the casino sits at the head of Fremont Street.", "downtown"],
+  ["Golden Nugget", 36.1700, -115.1442, "Its 'Hand of Faith' display is a 61-pound gold nugget — the largest existing gold nugget in the world — found in Australia in 1980.", "downtown"],
+  ["Binion's", 36.1697, -115.1444, "Original home of the World Series of Poker from 1970 to 2004, founded by Benny Binion.", "downtown"],
+  ["Four Queens", 36.1700, -115.1431, "Named for the four daughters of original owner Ben Goffstein; opened in 1966 at the corner of Fremont and 3rd.", "downtown"],
+  ["Fremont", 36.1697, -115.1428, "Opened in 1956 as downtown's tallest building at the time; Wayne Newton played a long early-career engagement in the Carnival Room lounge starting in 1959.", "downtown"],
+  ["The D", 36.1700, -115.1419, "Owner Derek Stevens renamed Fitzgeralds to 'The D' in 2012 — the 'D' standing for Derek/Detroit/Downtown.", "downtown"],
+  ["El Cortez", 36.1697, -115.1411, "Continuously operating since 1941, making it the longest-running casino in Las Vegas under its original name.", "downtown"],
+  ["Circa", 36.1719, -115.1469, "Opened in 2020 as the first ground-up new resort built in downtown Las Vegas in 40 years; has a multi-pool 'Stadium Swim' amphitheater.", "downtown"]
+];
+
+const $ = id => document.getElementById(id);
+const dl = $("casinos");
+CASINOS.forEach(c => { const o = document.createElement("option"); o.value = c[0]; dl.appendChild(o); });
+
+let target = null, guesses = [], closest = null;
+
+// Bounding box for the Strip + Downtown
+const BBOX = { latN: 36.180, latS: 36.085, lonW: -115.190, lonE: -115.130 };
+const MAP_W = 500, MAP_H = 600;
+function project(lat, lon) {
+  const x = (lon - BBOX.lonW) / (BBOX.lonE - BBOX.lonW) * MAP_W;
+  const y = (BBOX.latN - lat) / (BBOX.latN - BBOX.latS) * MAP_H;
+  return [x, y];
+}
+
+function drawBaseMap() {
+  const svg = $("map");
+  const ns = "http://www.w3.org/2000/svg";
+  // Background gradient via rect (already on svg style)
+  // Sketch a stylized Strip corridor (Las Vegas Blvd) - a long thin rectangle
+  const strip = document.createElementNS(ns,"path");
+  // Path roughly from Mandalay Bay (south) up to Sahara (north), then a jog to downtown
+  const stripPath = (() => {
+    const a = project(36.090, -115.176);
+    const b = project(36.148, -115.156);
+    const c = project(36.158, -115.150);
+    const d = project(36.170, -115.144);
+    return "M"+a[0]+" "+a[1]+" L"+b[0]+" "+b[1]+" L"+c[0]+" "+c[1]+" L"+d[0]+" "+d[1];
+  })();
+  strip.setAttribute("d", stripPath);
+  strip.setAttribute("stroke", "#5a4a2a");
+  strip.setAttribute("stroke-width", "26");
+  strip.setAttribute("stroke-linecap", "round");
+  strip.setAttribute("fill", "none");
+  strip.setAttribute("opacity", "0.55");
+  svg.appendChild(strip);
+  // Fremont Street line (downtown, going east-west)
+  const fremont = document.createElementNS(ns,"line");
+  const fA = project(36.1697, -115.147);
+  const fB = project(36.1697, -115.140);
+  fremont.setAttribute("x1", fA[0]); fremont.setAttribute("y1", fA[1]);
+  fremont.setAttribute("x2", fB[0]); fremont.setAttribute("y2", fB[1]);
+  fremont.setAttribute("stroke", "#5a4a2a");
+  fremont.setAttribute("stroke-width", "18");
+  fremont.setAttribute("stroke-linecap", "round");
+  fremont.setAttribute("opacity", "0.55");
+  svg.appendChild(fremont);
+
+  // Section labels
+  const stripLabel = document.createElementNS(ns,"text");
+  const sl = project(36.118, -115.190);
+  stripLabel.setAttribute("x", sl[0]); stripLabel.setAttribute("y", sl[1]);
+  stripLabel.setAttribute("fill", "#ffd24a"); stripLabel.setAttribute("font-size", "14");
+  stripLabel.setAttribute("font-weight", "bold");
+  stripLabel.textContent = "THE STRIP";
+  svg.appendChild(stripLabel);
+
+  const dtLabel = document.createElementNS(ns,"text");
+  const dl2 = project(36.176, -115.149);
+  dtLabel.setAttribute("x", dl2[0]); dtLabel.setAttribute("y", dl2[1]);
+  dtLabel.setAttribute("fill", "#ffd24a"); dtLabel.setAttribute("font-size", "14");
+  dtLabel.setAttribute("font-weight", "bold");
+  dtLabel.textContent = "DOWNTOWN";
+  svg.appendChild(dtLabel);
+
+  // North arrow
+  const arrow = document.createElementNS(ns,"text");
+  arrow.setAttribute("x", 470); arrow.setAttribute("y", 25);
+  arrow.setAttribute("fill", "#999"); arrow.setAttribute("font-size", "12");
+  arrow.textContent = "N ↑";
+  svg.appendChild(arrow);
+
+  // All casino dots
+  for (const c of CASINOS) {
+    const [x,y] = project(c[1], c[2]);
+    const dot = document.createElementNS(ns, "circle");
+    dot.setAttribute("cx", x); dot.setAttribute("cy", y);
+    dot.setAttribute("r", 3);
+    dot.setAttribute("fill", "#ffd24a");
+    dot.setAttribute("opacity", "0.45");
+    const title = document.createElementNS(ns, "title");
+    title.textContent = c[0];
+    dot.appendChild(title);
+    svg.appendChild(dot);
+  }
+}
+
+function clearOverlays() {
+  $("map").querySelectorAll("[data-overlay]").forEach(el => el.remove());
+}
+
+// Hotter/colder tier based on physical distance
+// Distance in degrees (approx). Strip ~ 0.06 degrees lat ≈ 4 miles top-to-bottom.
+function distDeg(a, b) {
+  return Math.sqrt(Math.pow(a[1]-b[1],2) + Math.pow((a[2]-b[2])*Math.cos(a[1]*Math.PI/180),2));
+}
+function tierFor(d) {
+  // Tier thresholds in degrees (~ miles*0.0145)
+  if (d < 0.0008) return { name: "BOILING", color: "#ff3030", k: 1.0 };  // ~0.05 mi
+  if (d < 0.0030) return { name: "Hot",     color: "#ff7030", k: 0.85 }; // ~0.2 mi
+  if (d < 0.0080) return { name: "Warmer",  color: "#ffb050", k: 0.7 };  // ~0.55 mi
+  if (d < 0.0180) return { name: "Warm",    color: "#f0d070", k: 0.55 };
+  if (d < 0.0350) return { name: "Cool",    color: "#a0c8b0", k: 0.4 };
+  if (d < 0.0600) return { name: "Cold",    color: "#7090c0", k: 0.25 };
+  return                    { name: "Freezing", color: "#4060a0", k: 0.1 };
+}
+
+function drawOverlays() {
+  clearOverlays();
+  const svg = $("map");
+  const ns = "http://www.w3.org/2000/svg";
+  for (const g of guesses) {
+    const [x,y] = project(g.casino[1], g.casino[2]);
+    const c = document.createElementNS(ns, "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y);
+    c.setAttribute("r", 6);
+    c.setAttribute("fill", g.tier.color);
+    c.setAttribute("stroke", "#fff"); c.setAttribute("stroke-width", "1");
+    c.setAttribute("data-overlay", "1");
+    const ttl = document.createElementNS(ns, "title");
+    ttl.textContent = g.casino[0] + " — " + g.tier.name;
+    c.appendChild(ttl);
+    svg.appendChild(c);
+    const lbl = document.createElementNS(ns, "text");
+    lbl.setAttribute("x", x+8); lbl.setAttribute("y", y+3);
+    lbl.setAttribute("fill", "#fff"); lbl.setAttribute("font-size", "10");
+    lbl.setAttribute("data-overlay", "1");
+    lbl.textContent = g.casino[0];
+    svg.appendChild(lbl);
+  }
+  if (closest) {
+    const [x,y] = project(closest.casino[1], closest.casino[2]);
+    const star = document.createElementNS(ns, "text");
+    star.setAttribute("x", x); star.setAttribute("y", y+5);
+    star.setAttribute("font-size", "18");
+    star.setAttribute("text-anchor", "middle");
+    star.setAttribute("data-overlay", "1");
+    star.textContent = "★";
+    star.setAttribute("fill", "#ffd24a");
+    svg.appendChild(star);
+  }
+}
+
+function newGame() {
+  target = CASINOS[Math.floor(Math.random() * CASINOS.length)];
+  guesses = []; closest = null;
+  $("clueText").textContent = target[3];
+  render(); $("guess").value = ""; $("guess").focus();
+}
+
+function submitGuess() {
+  const name = $("guess").value.trim();
+  if (!name) return;
+  const casino = CASINOS.find(c => c[0].toLowerCase() === name.toLowerCase());
+  if (!casino) { alert("\""+name+"\" isn't in the casino list. Try another."); return; }
+  if (guesses.some(g => g.casino[0] === casino[0])) { alert("Already guessed."); return; }
+  const d = distDeg(casino, target);
+  const tier = tierFor(d);
+  guesses.push({ casino, tier, d });
+  if (closest === null || d < closest.d) closest = { casino, d };
+  $("guess").value = ""; render();
+}
+
+function render() {
+  $("status").textContent = "Guesses: " + guesses.length;
+  $("closest").textContent = closest ? "Closest so far: " + closest.casino[0] : "";
+  const won = guesses.some(g => g.casino[0] === target[0]);
+  $("result").innerHTML = won
+    ? "<div class=\"win\">\uD83C\uDFB0 You got it! The answer is <b>"+target[0]+"</b>. Solved in "+guesses.length+" guess"+(guesses.length>1?"es":"")+".</div>"
+    : "";
+  const h = guesses.slice().reverse().map(g =>
+    "<div class=\"guess\" style=\"background:"+g.tier.color+"\"><span class=\"name\">"+g.casino[0]+"</span><span>"+g.tier.name+"</span></div>"
+  ).join("");
+  $("history").innerHTML = h;
+  drawOverlays();
+}
+
+$("go").onclick = submitGuess;
+$("guess").addEventListener("keydown", e => { if (e.key === "Enter") submitGuess(); });
+$("reset").onclick = newGame;
+
+drawBaseMap();
+newGame();
+</script>
+</body>
+</html>
