@@ -37,6 +37,13 @@
   .leaflet-popup-content { margin: 8px 10px; font-family: system-ui, sans-serif; }
   .leaflet-popup-content img { width:200px; max-height:140px; object-fit:cover; border-radius:4px; display:block; margin-top:4px; }
   .leaflet-popup-content .pop-name { font-weight:600; color:#ffd24a; font-size:.95em; }
+  /* Big gold LV dots */
+  .lv-dot { width:44px; height:44px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#fff3b0,#ffd24a 55%,#b8861c 100%); border:2px solid #fff; box-shadow:0 0 6px rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:transform .15s; }
+  .lv-dot:hover { transform:scale(1.12); z-index:1000; }
+  .lv-dot img { width:30px; height:30px; pointer-events:none; }
+  /* Guess overlay marker (smaller, sits above LV dots) */
+  .guess-dot { width:28px; height:28px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 6px rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; }
+  .vegasble-star-wrap { font-size:30px; color:#ffd24a; text-shadow:0 0 6px #000, 0 0 4px #000; line-height:1; }
 </style>
 </head>
 <body>
@@ -52,7 +59,7 @@
   <button id="viewAll">📍 All</button>
 </div>
 <div id="map"></div>
-<div class="legend">Gold dots: casinos (click for photo) · Colored pins: your guesses · ⭐ closest so far · Map tiles © OpenStreetMap contributors</div>
+<div class="legend">Gold LV dots: casinos (click for photo) · Colored markers: your guesses · ⭐ closest so far · Map tiles © OpenStreetMap contributors</div>
 <div class="row">
   <input id="guess" list="casinos" placeholder="Type a Vegas casino…" autocomplete="off">
   <button id="go">Guess</button>
@@ -105,6 +112,7 @@ const CASINOS = [
   ["El Cortez", 36.1697, -115.1411, "Bugsy Siegel and Meyer Lansky briefly owned this property in 1945 before they sold it and used the proceeds to begin building the Flamingo.", "downtown", "https://upload.wikimedia.org/wikipedia/commons/0/0a/EL_Cortez_Tower.jpg"],
   ["Circa", 36.1719, -115.1469, "Its sportsbook is the world's largest at 78 million pixels and 1,000+ seats, and the property is the first in downtown built as an adults-only (21+) resort.", "downtown", "https://upload.wikimedia.org/wikipedia/commons/d/da/CircaLogo.svg"]
 ];
+const LV_SIGN = "https://upload.wikimedia.org/wikipedia/commons/1/15/Welcome_to_Fabulous_Las_Vegas_Sign.svg";
 const PLACEHOLDER = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 140'><rect width='200' height='140' fill='%23222'/><text x='100' y='75' text-anchor='middle' fill='%23ffd24a' font-family='sans-serif' font-size='14'>no image</text></svg>";
 const $ = id => document.getElementById(id);
 const dl = $("casinos");
@@ -114,6 +122,17 @@ let map, baseMarkers = [], overlayLayer;
 const STRIP_BOUNDS = L.latLngBounds([36.088, -115.183], [36.150, -115.150]);
 const DOWNTOWN_BOUNDS = L.latLngBounds([36.166, -115.152], [36.176, -115.137]);
 const ALL_BOUNDS = L.latLngBounds([36.085, -115.190], [36.180, -115.135]);
+
+function makeLVIcon() {
+  return L.divIcon({
+    className: 'lv-dot-wrap',
+    html: '<div class="lv-dot"><img src="' + LV_SIGN + '" alt="LV"></div>',
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+    popupAnchor: [0, -22]
+  });
+}
+
 function initMap() {
   map = L.map('map', { zoomControl: true, attributionControl: true });
   map.fitBounds(STRIP_BOUNDS);
@@ -124,15 +143,13 @@ function initMap() {
   map.setMaxBounds(ALL_BOUNDS.pad(0.2));
   map.setMinZoom(13);
   for (const c of CASINOS) {
-    const dot = L.circleMarker([c[1], c[2]], {
-      radius: 6, color: "#ffd24a", weight: 1.2, fillColor: "#ffd24a", fillOpacity: 0.75
-    }).addTo(map);
+    const marker = L.marker([c[1], c[2]], { icon: makeLVIcon(), zIndexOffset: 0 }).addTo(map);
     const imgSrc = c[5] || PLACEHOLDER;
     const popupHtml = '<div class="pop-name">' + c[0] + '</div>' +
       '<img src="' + imgSrc + '" alt="' + c[0] + '" onerror="this.src=\''+PLACEHOLDER+'\'">';
-    dot.bindPopup(popupHtml, { maxWidth: 230 });
-    dot.bindTooltip(c[0]);
-    baseMarkers.push(dot);
+    marker.bindPopup(popupHtml, { maxWidth: 230 });
+    marker.bindTooltip(c[0]);
+    baseMarkers.push(marker);
   }
   overlayLayer = L.layerGroup().addTo(map);
 }
@@ -151,18 +168,21 @@ function tierFor(d) {
 function drawOverlays() {
   overlayLayer.clearLayers();
   for (const g of guesses) {
-    const m = L.circleMarker([g.casino[1], g.casino[2]], {
-      radius: 9, color: "#fff", weight: 1.5, fillColor: g.tier.color, fillOpacity: 0.95
-    }).addTo(overlayLayer);
-    m.bindTooltip(g.casino[0] + " — " + g.tier.name, { permanent: true, direction: "right", offset: [8, 0] });
+    const icon = L.divIcon({
+      className: 'guess-dot-wrap',
+      html: '<div class="guess-dot" style="background:' + g.tier.color + '"></div>',
+      iconSize: [28, 28], iconAnchor: [14, 14]
+    });
+    const m = L.marker([g.casino[1], g.casino[2]], { icon: icon, zIndexOffset: 500 }).addTo(overlayLayer);
+    m.bindTooltip(g.casino[0] + " — " + g.tier.name, { permanent: true, direction: "right", offset: [12, 0] });
   }
   if (closest) {
     const star = L.divIcon({
       className: 'vegasble-star',
-      html: '<div style="font-size:24px;color:#ffd24a;text-shadow:0 0 4px #000;line-height:1;">★</div>',
-      iconSize: [24, 24], iconAnchor: [12, 12]
+      html: '<div class="vegasble-star-wrap">★</div>',
+      iconSize: [30, 30], iconAnchor: [15, 15]
     });
-    L.marker([closest.casino[1], closest.casino[2]], { icon: star }).addTo(overlayLayer);
+    L.marker([closest.casino[1], closest.casino[2]], { icon: star, zIndexOffset: 1000 }).addTo(overlayLayer);
   }
 }
 function newGame() {
